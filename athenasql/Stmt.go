@@ -9,6 +9,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/athena"
 )
 
+// Statuses
+const (
+	ExecutionStatusRunning   = "RUNNING"
+	ExecutionStatusSucceeded = "SUCCEEDED"
+)
+
 // Stmt is a prepared statement. It is bound to a Conn and not used by multiple
 // goroutines concurrently.
 type Stmt struct {
@@ -74,13 +80,14 @@ func (stmt *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 		if err != nil {
 			return nil, fmt.Errorf(`unable to check status: %s`, err.Error())
 		}
-		if *qrop.QueryExecution.Status.State != "RUNNING" {
+		if *qrop.QueryExecution.Status.State != ExecutionStatusRunning {
 			break
 		}
 		time.Sleep(duration)
 
 	}
-	if *qrop.QueryExecution.Status.State != "SUCCEEDED" {
+
+	if *qrop.QueryExecution.Status.State != ExecutionStatusSucceeded {
 		return nil, fmt.Errorf(`execution failed: %s`, *qrop.QueryExecution.Status.State)
 	}
 
