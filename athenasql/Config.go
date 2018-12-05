@@ -8,6 +8,7 @@ import (
 // Config contains all configuration from passed dsn
 type Config struct {
 	Region           string
+	Database         string
 	SessionGenerator string
 	S3Bucket         string
 }
@@ -34,6 +35,8 @@ func ConfigFromDSN(dsn string) (Config, error) {
 			cfg.S3Bucket = pair[1]
 		case "region":
 			cfg.Region = pair[1]
+		case "db", "database":
+			cfg.Database = pair[1]
 		default:
 			return Config{}, fmt.Errorf(`%q is not a valid parameter`, pair[0])
 		}

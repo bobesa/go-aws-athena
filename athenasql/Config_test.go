@@ -31,10 +31,16 @@ func TestConfigFromDSN(t *testing.T) {
 			Config: Config{SessionGenerator: "aaa"},
 		},
 
-		// Read All of 3 above
+		// Read Database
 		{
-			DSN:    "session_generator=sg region=rrr s3_bucket=s3b",
-			Config: Config{SessionGenerator: "sg", Region: "rrr", S3Bucket: "s3b"},
+			DSN:    "db=aaa",
+			Config: Config{Database: "aaa"},
+		},
+
+		// Read All of above
+		{
+			DSN:    "session_generator=sg region=rrr s3_bucket=s3b db=dbdb",
+			Config: Config{SessionGenerator: "sg", Region: "rrr", S3Bucket: "s3b", Database: "dbdb"},
 		},
 	} {
 		cfg, err := ConfigFromDSN(testCase.DSN)
