@@ -1,5 +1,12 @@
 # Go AWS Athena driver for database/sql
 
+Go database/sql driver for AWS Athena wraps Athena's AWS SDK to provide go sql
+driver as you would expect. This allows you to query AWS Athena in same way as
+any other SQL database.
+
+This driver also allows you to use **custom session generators** to use bastion
+accounts or other ways of creating aws session.
+
 ## Install
 
 ```bash
@@ -73,3 +80,8 @@ Afterwards you can use it when opening sql db connection
 ```go
 db, err := sql.Open("athena", "session_generator=mysessiongenerator")
 ```
+
+## Notes
+
+- Driver is not written for Exec, only Query
+- Original inspirational athena querying gist code: [Kartiksura's GitHub Gist](https://gist.github.com/kartiksura/93160be1078648a14ec0ddc125c35546)
