@@ -47,68 +47,67 @@ func (stmt *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 		return nil, fmt.Errorf(`unable to create session: session generator %q not found`, stmt.config.SessionGenerator)
 	}
 
-	sess, err := sessionGenerator(stmt.config)
+	awsSession, err := sessionGenerator(stmt.config)
 	if err != nil {
 		return nil, fmt.Errorf(`unable to create session: %s`, err.Error())
 	}
 
-	svc := athena.New(sess, aws.NewConfig().WithRegion(stmt.config.Region))
-	var s athena.StartQueryExecutionInput
-	s.SetQueryString(stmt.query)
+	athenaService := athena.New(awsSession, aws.NewConfig().WithRegion(stmt.config.Region))
+	var queryStartInput athena.StartQueryExecutionInput
+	queryStartInput.SetQueryString(stmt.query)
 
-	var q athena.QueryExecutionContext
-	q.SetDatabase(stmt.config.Database)
-	s.SetQueryExecutionContext(&q)
+	var queryContext athena.QueryExecutionContext
+	queryContext.SetDatabase(stmt.config.Database)
+	queryStartInput.SetQueryExecutionContext(&queryContext)
 
-	var r athena.ResultConfiguration
-	r.SetOutputLocation("s3://" + stmt.config.S3Bucket)
-	s.SetResultConfiguration(&r)
+	var resultConfig athena.ResultConfiguration
+	resultConfig.SetOutputLocation("s3://" + stmt.config.S3Bucket)
+	queryStartInput.SetResultConfiguration(&resultConfig)
 
-	result, err := svc.StartQueryExecution(&s)
+	result, err := athenaService.StartQueryExecution(&queryStartInput)
 	if err != nil {
 		return nil, fmt.Errorf(`unable to start query: %s`, err.Error())
 	}
 
-	var qri athena.GetQueryExecutionInput
-	qri.SetQueryExecutionId(*result.QueryExecutionId)
+	var queryInput athena.GetQueryExecutionInput
+	queryInput.SetQueryExecutionId(*result.QueryExecutionId)
 
-	var qrop *athena.GetQueryExecutionOutput
+	var queryOutput *athena.GetQueryExecutionOutput
 	duration := time.Duration(2) * time.Second // Pause for 2 seconds
 
 	for {
-		qrop, err = svc.GetQueryExecution(&qri)
+		queryOutput, err = athenaService.GetQueryExecution(&queryInput)
 		if err != nil {
 			return nil, fmt.Errorf(`unable to check status: %s`, err.Error())
 		}
-		if *qrop.QueryExecution.Status.State != ExecutionStatusRunning {
+		if *queryOutput.QueryExecution.Status.State != ExecutionStatusRunning {
 			break
 		}
 		time.Sleep(duration)
-
 	}
 
-	if *qrop.QueryExecution.Status.State != ExecutionStatusSucceeded {
-		return nil, fmt.Errorf(`execution failed: %s`, *qrop.QueryExecution.Status.State)
+	if *queryOutput.QueryExecution.Status.State != ExecutionStatusSucceeded {
+		return nil, fmt.Errorf(`execution failed: %s`, *queryOutput.QueryExecution.Status.State)
 	}
 
-	var ip athena.GetQueryResultsInput
-	ip.SetQueryExecutionId(*result.QueryExecutionId)
+	var queryResultsInput athena.GetQueryResultsInput
+	queryResultsInput.SetQueryExecutionId(*result.QueryExecutionId)
 
-	op, err := svc.GetQueryResults(&ip)
+	queryResultsOutput, err := athenaService.GetQueryResults(&queryResultsInput)
 	if err != nil {
 		return nil, fmt.Errorf(`unable to receive results: %s`, err.Error())
 	}
 
-	var ep athena.GetQueryExecutionInput
-	ep.SetQueryExecutionId(*result.QueryExecutionId)
-	ex, err := svc.GetQueryExecution(&ep)
+	var queryExecInput athena.GetQueryExecutionInput
+	queryExecInput.SetQueryExecutionId(*result.QueryExecutionId)
+	queryExecutionInfo, err := athenaService.GetQueryExecution(&queryExecInput)
 	if err != nil {
 		return nil, fmt.Errorf(`unable to receive stats: %s`, err.Error())
 	}
 
 	return &Rows{
-		resultSet: op.ResultSet,
-		stats:     ex.QueryExecution.Statistics,
+		resultSet: queryResultsOutput.ResultSet,
+		stats:     queryExecutionInfo.QueryExecution.Statistics,
 		current:   1, // skip headers
 	}, nil
 }
