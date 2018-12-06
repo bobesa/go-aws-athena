@@ -1,8 +1,10 @@
 package athenasql
 
 import (
+	"context"
 	"database/sql/driver"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -14,6 +16,18 @@ const (
 	ExecutionStatusRunning   = "RUNNING"
 	ExecutionStatusSucceeded = "SUCCEEDED"
 )
+
+func valuesToNamedValues(args []driver.Value) []driver.NamedValue {
+	namedArgs := make([]driver.NamedValue, len(args))
+	for i, arg := range args {
+		namedArgs[i] = driver.NamedValue{
+			Name:    strconv.Itoa(i),
+			Ordinal: i,
+			Value:   arg,
+		}
+	}
+	return namedArgs
+}
 
 // Stmt is a prepared statement. It is bound to a Conn and not used by multiple
 // goroutines concurrently.
@@ -35,6 +49,14 @@ func (stmt *Stmt) NumInput() int {
 
 // Exec executes a query that doesn't return rows, such as an INSERT or UPDATE.
 func (stmt *Stmt) Exec(args []driver.Value) (driver.Result, error) {
+	return stmt.ExecContext(context.Background(), valuesToNamedValues(args))
+}
+
+// ExecContext executes a query that doesn't return rows, such
+// as an INSERT or UPDATE.
+//
+// ExecContext must honor the context timeout and return when it is canceled.
+func (stmt *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
 	return nil, fmt.Errorf("n/a")
 }
 
@@ -42,6 +64,13 @@ func (stmt *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 //
 // Deprecated: Drivers should implement StmtQueryContext instead (or additionally).
 func (stmt *Stmt) Query(args []driver.Value) (driver.Rows, error) {
+	return stmt.QueryContext(context.Background(), valuesToNamedValues(args))
+}
+
+// QueryContext executes a query that may return rows, such as a SELECT.
+//
+// QueryContext must honor the context timeout and return when it is canceled.
+func (stmt *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
 	sessionGenerator, found := sessionGenerators[stmt.config.SessionGenerator]
 	if !found {
 		return nil, fmt.Errorf(`unable to create session: session generator %q not found`, stmt.config.SessionGenerator)
@@ -83,7 +112,13 @@ func (stmt *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 		if *queryOutput.QueryExecution.Status.State != ExecutionStatusRunning {
 			break
 		}
-		time.Sleep(duration)
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf(`query was cancelled`)
+		default:
+			time.Sleep(duration)
+		}
 	}
 
 	if *queryOutput.QueryExecution.Status.State != ExecutionStatusSucceeded {
