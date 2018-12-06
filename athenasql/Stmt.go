@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -16,18 +15,6 @@ const (
 	ExecutionStatusRunning   = "RUNNING"
 	ExecutionStatusSucceeded = "SUCCEEDED"
 )
-
-func valuesToNamedValues(args []driver.Value) []driver.NamedValue {
-	namedArgs := make([]driver.NamedValue, len(args))
-	for i, arg := range args {
-		namedArgs[i] = driver.NamedValue{
-			Name:    strconv.Itoa(i),
-			Ordinal: i,
-			Value:   arg,
-		}
-	}
-	return namedArgs
-}
 
 // Stmt is a prepared statement. It is bound to a Conn and not used by multiple
 // goroutines concurrently.
@@ -71,6 +58,11 @@ func (stmt *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 //
 // QueryContext must honor the context timeout and return when it is canceled.
 func (stmt *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	query, err := queryWithArgs(stmt.query, args)
+	if err != nil {
+		return nil, fmt.Errorf(`unable to provide arguments for query: %s`, err.Error())
+	}
+
 	sessionGenerator, found := sessionGenerators[stmt.config.SessionGenerator]
 	if !found {
 		return nil, fmt.Errorf(`unable to create session: session generator %q not found`, stmt.config.SessionGenerator)
@@ -83,7 +75,7 @@ func (stmt *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (d
 
 	athenaService := athena.New(awsSession, aws.NewConfig().WithRegion(stmt.config.Region))
 	var queryStartInput athena.StartQueryExecutionInput
-	queryStartInput.SetQueryString(stmt.query)
+	queryStartInput.SetQueryString(query)
 
 	var queryContext athena.QueryExecutionContext
 	queryContext.SetDatabase(stmt.config.Database)
