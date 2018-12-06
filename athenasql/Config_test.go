@@ -8,6 +8,18 @@ func TestConfigFromDSN(t *testing.T) {
 		Config Config
 		Errors bool
 	}{
+		// Unknown parameter
+		{
+			DSN:    "unknownparam=unknownvalue",
+			Errors: true,
+		},
+
+		// Param provided with no value
+		{
+			DSN:    "aaa bbb",
+			Errors: true,
+		},
+
 		// Empty SDN == Empty config
 		{
 			Config: Config{},
